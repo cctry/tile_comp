@@ -36,10 +36,10 @@ double test(const CUDA_ptr<half> &mat, const CUDA_ptr<half> &vec,
     if (ncol % _TileC)
         puts("Bad ncol");
     CUDA_ptr<float> d_res(nrow);
-    int num_blk = 1024, num_thd = 1024;
-    cudaChk(cudaOccupancyMaxPotentialBlockSizeVariableSMem(
-        &num_blk, &num_thd, __kernel_mv<_TileR, _TileC>,
-        smem_config<_TileR, _TileC>()));
+    int num_blk = 800, num_thd = 1024;
+    // cudaChk(cudaOccupancyMaxPotentialBlockSizeVariableSMem(
+    //     &num_blk, &num_thd, __kernel_mv<_TileR, _TileC>,
+    //     smem_config<_TileR, _TileC>(), 8*32));
     auto f = smem_config<_TileR, _TileC>();
     __kernel_mv<_TileR, _TileC><<<num_blk, num_thd, f(num_thd)>>>(
         mat.get(), vec.get(), d_res.get(), nrow, ncol);
