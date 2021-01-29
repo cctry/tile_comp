@@ -1,10 +1,2 @@
-rm -rf ./build
-mkdir build
-cd build
-cmake --config Release .. 
-make -j
-./tile_comp > ../res.txt 
-if (( $EUID != 0 ));
-then
-  sudo $(which nvprof) ./tile_comp_prof > ../prof.txt
-fi
+nvcc -O3 -arch=sm_70 tile_size/tile_size_test.cu tile_size/cublas.cu lib/utils.cu -Ilib -lcublas -DTIME
+./a.out
