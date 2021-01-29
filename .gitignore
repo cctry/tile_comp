@@ -32,6 +32,7 @@
 *.app
 
 .vscode/
-.build/
+build/
 res.txt
 prof.txt
+tensor.txt
