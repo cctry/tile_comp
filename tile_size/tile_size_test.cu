@@ -3,6 +3,7 @@
 #include "kernels.hpp"
 #include "mma.hpp"
 #include "range.hpp"
+#include "tile_kernel.hpp"
 #include "utils.h"
 #include <bits/stdc++.h>
 using namespace culib;
@@ -209,6 +210,47 @@ void my_kernel(const CUDA_ptr<half> &mat, const CUDA_ptr<half> &vec,
     }
 }
 
+template <int _TileR, int _TileC>
+void test_tile(const CUDA_ptr<half> &mat, const CUDA_ptr<half> &vec,
+               const int nrow, const int ncol) {
+    if (nrow % _TileR)
+        puts("Bad nrow");
+    if (ncol % _TileC)
+        puts("Bad ncol");
+    CUDA_ptr<float> d_res(nrow);
+    int num_blk = 1024, num_thd = 64, smem_size;
+    auto f = [](int n) { return (n / 32) * 256 * sizeof(float); };
+    cudaChk(cudaOccupancyMaxPotentialBlockSizeVariableSMem(
+        &num_blk, &num_thd, __kernel_mv_tile<_TileR, _TileC>, f));
+    smem_size = f(num_thd);
+    // printf("<<<%d, %d, %d>>>\t%d\n", num_blk, num_thd, smem_size);
+    __kernel_mv_tile<_TileR, _TileC><<<num_blk, num_thd, smem_size>>>(
+        mat.get(), vec.get(), d_res.get(), nrow, ncol);
+    std::vector<float> h_res(nrow);
+    d_res.dump(h_res.data());
+    if (!verify(h_res, ncol / 2)) {
+        puts("Tensor Wrong");
+        for (auto i : indices(h_res)) {
+            auto val = h_res[i];
+            if (abs(val - ncol / 2) > 0.5) {
+                std::cout << "error at " << i << ":\t" << val << std::endl;
+                return;
+            }
+        }
+    }
+#ifdef TIME
+    auto time = wtime(
+        10,
+        [&]() {
+            __kernel_mv_tile<_TileR, _TileC><<<num_blk, num_thd, smem_size>>>(
+                mat.get(), vec.get(), d_res.get(), nrow, ncol);
+            cudaChk(cudaDeviceSynchronize());
+        },
+        [&]() { d_res.clear(); });
+    printf("Limit(%d,%d)\t%lf us\n", _TileR, _TileC, time);
+#endif
+}
+
 #define TEST(r, c)                                                             \
     printf("(%d,%d):\t%lf us\n", (r), (c),                                     \
            test<(r), (c)>(d_mat, d_vec, nrow, ncol))
@@ -236,4 +278,6 @@ int main(int ac, char **av) {
     cublasHF(d_mat, d_vec, nrow, ncol);
     cublasFF(d_mat, d_vec, nrow, ncol);
     my_kernel(d_mat, d_vec, nrow, ncol);
+    test_tile<32,16>(d_mat, d_vec, nrow, ncol);
+    test_tile<16,16>(d_mat, d_vec, nrow, ncol);
 }
